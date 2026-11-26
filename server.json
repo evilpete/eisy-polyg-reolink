@@ -1,0 +1,14 @@
+{
+  "credits": [
+    {
+      "author": "evilpete",
+      "description": "Reolink NVR motion / AI detection push events for IoX",
+      "url": "https://github.com/evilpete/eisy-polyg-reolink"
+    }
+  ],
+  "executable": "reolink-poly.py",
+  "install": "install.sh",
+  "type": "python3",
+  "shortPoll": 60,
+  "longPoll": 300
+}
