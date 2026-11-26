@@ -1,0 +1,21 @@
+ND-reonvr-NAME = Reolink NVR
+ND-reonvr-ICON = Output
+ST-reonvr-ST-NAME = Node Server Online
+ST-reonvr-GV0-NAME = NVR Connected
+ST-reonvr-GV1-NAME = Push Events Active
+ST-reonvr-GV2-NAME = Cameras
+CMD-reonvr-QUERY-NAME = Query
+CMD-reonvr-DISCOVER-NAME = Re-discover Cameras
+
+ND-reocam-NAME = Reolink Camera
+ND-reocam-ICON = MotionSensor
+ST-reocam-ST-NAME = Motion
+ST-reocam-GV0-NAME = Person
+ST-reocam-GV1-NAME = Vehicle
+ST-reocam-GV2-NAME = Animal
+ST-reocam-GV3-NAME = Package
+ST-reocam-GV4-NAME = Visitor
+ST-reocam-GV5-NAME = Online
+CMD-reocam-DON-NAME = Motion On
+CMD-reocam-DOF-NAME = Motion Off
+CMD-reocam-QUERY-NAME = Query

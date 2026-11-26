@@ -1,0 +1,103 @@
+<nodeDefs>
+  <!-- NVR / controller -->
+  <nodeDef id="reonvr" nls="reonvr">
+    <editors />
+    <sts>
+      <st id="ST" editor="bool" />
+      <st id="GV0" editor="bool" />
+      <st id="GV1" editor="bool" />
+      <st id="GV2" editor="count" />
+    </sts>
+    <cmds>
+      <sends />
+      <accepts>
+        <cmd id="QUERY" />
+        <cmd id="DISCOVER" />
+      </accepts>
+    </cmds>
+  </nodeDef>
+
+  <!-- Camera, motion only -->
+  <nodeDef id="reocam" nls="reocam">
+    <editors />
+    <sts>
+      <st id="ST" editor="bool" />
+      <st id="GV5" editor="bool" />
+    </sts>
+    <cmds>
+      <sends>
+        <cmd id="DON" />
+        <cmd id="DOF" />
+      </sends>
+      <accepts>
+        <cmd id="QUERY" />
+      </accepts>
+    </cmds>
+  </nodeDef>
+
+  <!-- Camera with person / vehicle / animal detection -->
+  <nodeDef id="reocamai" nls="reocam">
+    <editors />
+    <sts>
+      <st id="ST" editor="bool" />
+      <st id="GV0" editor="bool" />
+      <st id="GV1" editor="bool" />
+      <st id="GV2" editor="bool" />
+      <st id="GV5" editor="bool" />
+    </sts>
+    <cmds>
+      <sends>
+        <cmd id="DON" />
+        <cmd id="DOF" />
+      </sends>
+      <accepts>
+        <cmd id="QUERY" />
+      </accepts>
+    </cmds>
+  </nodeDef>
+
+  <!-- Camera with person / vehicle / animal / package detection -->
+  <nodeDef id="reocampk" nls="reocam">
+    <editors />
+    <sts>
+      <st id="ST" editor="bool" />
+      <st id="GV0" editor="bool" />
+      <st id="GV1" editor="bool" />
+      <st id="GV2" editor="bool" />
+      <st id="GV3" editor="bool" />
+      <st id="GV5" editor="bool" />
+    </sts>
+    <cmds>
+      <sends>
+        <cmd id="DON" />
+        <cmd id="DOF" />
+      </sends>
+      <accepts>
+        <cmd id="QUERY" />
+      </accepts>
+    </cmds>
+  </nodeDef>
+
+  <!-- Doorbell -->
+  <nodeDef id="reodbell" nls="reocam">
+    <editors />
+    <sts>
+      <st id="ST" editor="bool" />
+      <st id="GV0" editor="bool" />
+      <st id="GV1" editor="bool" />
+      <st id="GV2" editor="bool" />
+      <st id="GV3" editor="bool" />
+      <st id="GV4" editor="bool" />
+      <st id="GV5" editor="bool" />
+    </sts>
+    <cmds>
+      <sends>
+        <cmd id="DON" />
+        <cmd id="DOF" />
+      </sends>
+      <accepts>
+        <cmd id="QUERY" />
+      </accepts>
+    </cmds>
+  </nodeDef>
+</nodeDefs>
