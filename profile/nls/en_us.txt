@@ -9,6 +9,12 @@ CMD-reonvr-DISCOVER-NAME = Re-discover Cameras
 
 ND-reocam-NAME = Reolink Camera
 ND-reocam-ICON = MotionSensor
+ND-reocamai-NAME = Reolink AI Camera
+ND-reocamai-ICON = MotionSensor
+ND-reocampk-NAME = Reolink AI Camera (Package)
+ND-reocampk-ICON = MotionSensor
+ND-reodbell-NAME = Reolink Doorbell
+ND-reodbell-ICON = MotionSensor
 ST-reocam-ST-NAME = Motion
 ST-reocam-GV0-NAME = Person
 ST-reocam-GV1-NAME = Vehicle
