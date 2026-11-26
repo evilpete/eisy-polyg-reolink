@@ -48,6 +48,18 @@ Set these custom parameters, then save:
       <td><code>5</code></td>
       <td>Seconds a motion / AI detection stays ON after the NVR clears it (default 5, <code>0</code> = off). Stops rapid On/Off flapping</td>
     </tr>
+    <tr>
+      <td><code>use</code></td>
+      <td>no</td>
+      <td><code>2,7</code></td>
+      <td>Only these cameras (all others ignored). Alias: <code>include</code></td>
+    </tr>
+    <tr>
+      <td><code>exclude</code></td>
+      <td>no</td>
+      <td><code>1,4,5</code></td>
+      <td>Ignore these cameras (use all others). Alias: <code>ignore</code></td>
+    </tr>
   </tbody>
 </table>
 
@@ -59,3 +71,8 @@ Camera nodes are created automatically, one per NVR channel. The node type
 matches the camera: motion-only cameras show Motion and Online; AI cameras
 add Person / Vehicle / Animal (and Package if supported); doorbells add Visitor. Use the NVR
 node's **Re-discover Cameras** command after adding a camera to the NVR.
+
+Camera numbers in `use` / `exclude` start at **1**, as the NVR app shows them
+(camera 1 = node `cam0`). The node server log lists each camera's number and
+name at startup. If both are set, `exclude` is applied after `use`. Nodes for
+ignored cameras are removed from IoX.
