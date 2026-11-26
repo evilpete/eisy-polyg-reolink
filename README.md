@@ -14,27 +14,70 @@ webhook).
 
 **Reolink NVR** (`reonvr`)
 
-| Driver | Meaning |
-|---|---|
-| ST | Node server online |
-| GV0 | Logged in to NVR |
-| GV1 | Push events confirmed (set after the first push arrives) |
-| GV2 | Number of cameras |
+<table>
+  <thead>
+    <tr>
+      <th>Driver</th>
+      <th>Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ST</td>
+      <td>Node server online</td>
+    </tr>
+    <tr>
+      <td>GV0</td>
+      <td>Logged in to NVR</td>
+    </tr>
+    <tr>
+      <td>GV1</td>
+      <td>Push events confirmed (set after the first push arrives)</td>
+    </tr>
+    <tr>
+      <td>GV2</td>
+      <td>Number of cameras</td>
+    </tr>
+  </tbody>
+</table>
+
 
 Commands: Query, Re-discover Cameras
 
 **Reolink Camera**, one per NVR channel. The node type matches what the
 camera can detect, so values that can never change are not shown:
 
-| Driver | Meaning | `reocam` | `reocamai` | `reocampk` | `reodbell` |
-|---|---|---|---|---|---|
-| ST | Motion | x | x | x | x |
-| GV0 | Person | | x | x | x |
-| GV1 | Vehicle | | x | x | x |
-| GV2 | Animal | | x | x | x |
-| GV3 | Package | | | x | x |
-| GV4 | Visitor (doorbell button) | | | | x |
-| GV5 | Camera online | x | x | x | x |
+<table>
+  <thead>
+    <tr>
+      <th>Driver</th> <th>Meaning</th> <th><code>reocam</code></th> <th><code>reocamai</code></th> <th><code>reocampk</code></th> <th><code>reodbell</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ST</td> <td>Motion</td> <td>x</td> <td>x</td> <td>x</td> <td>x</td>
+    </tr>
+    <tr>
+      <td>GV0</td> <td>Person</td> <td></td> <td>x</td> <td>x</td> <td>x</td>
+    </tr>
+    <tr>
+      <td>GV1</td> <td>Vehicle</td> <td></td> <td>x</td> <td>x</td> <td>x</td>
+    </tr>
+    <tr>
+      <td>GV2</td> <td>Animal</td> <td></td> <td>x</td> <td>x</td> <td>x</td>
+    </tr>
+    <tr>
+      <td>GV3</td> <td>Package</td> <td></td> <td></td> <td>x</td> <td>x</td>
+    </tr>
+    <tr>
+      <td>GV4</td> <td>Visitor (doorbell button)</td> <td></td> <td></td> <td></td> <td>x</td>
+    </tr>
+    <tr>
+      <td>GV5</td> <td>Camera online</td> <td>x</td> <td>x</td> <td>x</td> <td>x</td>
+    </tr>
+  </tbody>
+</table>
+
 
 Sends `DON` / `DOF` when motion starts / stops, so programs can use
 `If Control 'Front Door' is switched On`. All drivers can also be used as
