@@ -26,6 +26,7 @@ HOLD_DEFAULT = 5       # seconds a detection stays ON after it clears
 
 class Controller(udi_interface.Node):
     id = 'reonvr'
+    hint = [0x01, 0x0e, 0x01, 0x00]   # Gateway (UniversalDevicesInc/hints hint.yaml)
     drivers = [
         {'driver': 'ST',  'value': 1, 'uom': 2},   # node server online (PG3)
         {'driver': 'GV0', 'value': 0, 'uom': 56},  # devices connected
