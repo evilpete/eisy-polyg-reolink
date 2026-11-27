@@ -27,8 +27,13 @@ LABELS = {'ST': 'motion', 'GV0': 'person', 'GV1': 'vehicle', 'GV2': 'animal',
           'GV3': 'package', 'GV4': 'visitor', 'GV5': 'online'}
 
 
-def channel_address(channel):
-    return f'cam{channel}'
+def channel_address(device_id, channel):
+    """IoX address for a camera node. The original single device ('nvr')
+    keeps cam0, cam1 ... so existing nodes and programs survive; other
+    devices use <id>_<channel>, e.g. cam_garage_0."""
+    if device_id == 'nvr':
+        return f'cam{channel}'
+    return f'{device_id}_{channel}'
 
 
 def _drv(name):

@@ -1,9 +1,10 @@
-ND-reonvr-NAME = Reolink NVR
+ND-reonvr-NAME = Reolink
 ND-reonvr-ICON = Output
 ST-reonvr-ST-NAME = Node Server Online
-ST-reonvr-GV0-NAME = NVR Connected
-ST-reonvr-GV1-NAME = Push Events Active
+ST-reonvr-GV0-NAME = Devices Connected
+ST-reonvr-GV1-NAME = Devices Push Active
 ST-reonvr-GV2-NAME = Cameras
+ST-reonvr-GV3-NAME = Devices Configured
 CMD-reonvr-QUERY-NAME = Query
 CMD-reonvr-DISCOVER-NAME = Re-discover Cameras
 
