@@ -1,14 +1,19 @@
-"""Controller node: owns the NVR connection and the Baichuan event subscription."""
+"""Controller node: reads the config and runs one Device per NVR / camera.
+
+All devices share one asyncio loop in a background thread (udi_interface is
+threaded, reolink_aio is asyncio). Each device connects, subscribes to push
+events and reconnects on its own, so one being offline does not affect the
+others.
+"""
 import asyncio
 import logging
 import threading
 import time
 
 import udi_interface
-from reolink_aio.api import Host
-from reolink_aio.exceptions import CredentialsInvalidError
 
-from .camera import camera_class, channel_address
+from .config import parse_params
+from .device import Device
 
 LOGGER = udi_interface.LOGGER
 Custom = udi_interface.Custom
@@ -16,34 +21,33 @@ Custom = udi_interface.Custom
 # reolink_aio is chatty at DEBUG; keep it at INFO unless debugging the lib
 logging.getLogger('reolink_aio').setLevel(logging.INFO)
 
-CHECK_INTERVAL = 60      # seconds between subscription health checks
-RETRY_MIN = 10           # reconnect backoff (seconds)
-RETRY_MAX = 300
 HOLD_DEFAULT = 5       # seconds a detection stays ON after it clears
 
 
 class Controller(udi_interface.Node):
     id = 'reonvr'
+    hint = [0x01, 0x0e, 0x01, 0x00]   # Gateway (UniversalDevicesInc/hints hint.yaml)
     drivers = [
         {'driver': 'ST',  'value': 1, 'uom': 2},   # node server online (PG3)
-        {'driver': 'GV0', 'value': 0, 'uom': 2},   # logged in to NVR
-        {'driver': 'GV1', 'value': 0, 'uom': 2},   # push events confirmed
+        {'driver': 'GV0', 'value': 0, 'uom': 56},  # devices connected
+        {'driver': 'GV1', 'value': 0, 'uom': 56},  # devices with push events confirmed
         {'driver': 'GV2', 'value': 0, 'uom': 56},  # cameras
+        {'driver': 'GV3', 'value': 0, 'uom': 56},  # devices configured
     ]
 
     def __init__(self, poly, primary, address, name):
         super().__init__(poly, primary, address, name)
         self.poly = poly
         self.params = Custom(poly, 'customparams')
-        self.cameras = {}
-        self.host = None
-        self._cfg = None
+        self.devices = []
+        self.hold = HOLD_DEFAULT
+        self._cfgs = None
+        self._uids = {}            # camera UID -> (device, channel, name)
         self._lock = threading.Lock()
         self._loop = None
         self._thread = None
         self._stop_evt = None
         self._started = False
-        self.hold = HOLD_DEFAULT
 
         poly.subscribe(poly.START, self.start, address)
         poly.subscribe(poly.STOP, self.stop)
@@ -55,208 +59,154 @@ class Controller(udi_interface.Node):
     # ------------------------------------------------------------------ PG3
 
     def start(self):
-        LOGGER.info('Reolink NVR node server starting')
+        LOGGER.info('Reolink node server starting')
         self.poly.updateProfile()
         self.poly.setCustomParamsDoc()
         self._started = True
         self._apply_config()
 
     def stop(self):
-        LOGGER.info('Reolink NVR node server stopping')
-        self._stop_worker()
-        self.setDriver('GV0', 0)
-        self.setDriver('GV1', 0)
+        LOGGER.info('Reolink node server stopping')
+        with self._lock:
+            self._stop_worker()
+        self.refresh_status()
 
     def parameter_handler(self, params):
         self.params.load(params)
         self._apply_config()
 
+    # -------------------------------------------------------------- notices
+
+    def set_notice(self, key, text):
+        self.poly.Notices[key] = text
+
+    def clear_notice(self, key):
+        try:
+            if key in self.poly.Notices:
+                self.poly.Notices.delete(key)
+        except Exception as err:
+            LOGGER.debug(f'clear notice {key}: {err!r}')
+
+    # --------------------------------------------------------------- config
+
     def _read_config(self):
         self.poly.Notices.clear()
-        host = (self.params.get('host') or '').strip()
-        user = (self.params.get('username') or '').strip()
-        pw = self.params.get('password') or ''
-        missing = [k for k, v in (('host', host), ('username', user), ('password', pw)) if not v]
-        if missing:
-            self.poly.Notices['cfg'] = f'Please set: {", ".join(missing)}'
-            return None
-        port = (self.params.get('port') or '').strip()
-        https = (self.params.get('use_https') or '').strip().lower()
-        hold = (self.params.get('hold_time') or '').strip()
+        params = dict(self.params.items())
+        hold = (params.get('hold_time') or '').strip()
         try:
             self.hold = max(0.0, float(hold)) if hold else HOLD_DEFAULT
         except ValueError:
-            self.poly.Notices['hold'] = f'hold_time must be a number of seconds, using {HOLD_DEFAULT}'
+            self.set_notice('hold', f'hold_time must be a number of seconds, using {HOLD_DEFAULT}')
             self.hold = HOLD_DEFAULT
-        return {
-            'host': host,
-            'user': user,
-            'pw': pw,
-            'port': int(port) if port.isdigit() else None,
-            'https': True if https in ('1', 'true', 'yes') else (False if https in ('0', 'false', 'no') else None),
-        }
+
+        cfgs, problems = parse_params(params)
+        for i, text in enumerate(problems):
+            LOGGER.warning(f'config: {text}')
+            self.set_notice(f'cfg{i}', text)
+        for cfg in cfgs:
+            LOGGER.info(f'config: {cfg!r}')
+        return tuple(cfgs)
 
     def _apply_config(self):
         if not self._started:
             return
-        cfg = self._read_config()
+        cfgs = self._read_config()
         with self._lock:
-            if cfg == self._cfg and self._thread and self._thread.is_alive():
+            if cfgs == self._cfgs and self._thread and self._thread.is_alive():
                 return
             self._stop_worker()
-            self._cfg = cfg
-            if cfg is None:
+            self._cfgs = cfgs
+            self.devices = [Device(self, c) for c in cfgs]
+            self._uids = {}
+            self.refresh_status()
+            if not cfgs:
                 return
-            self._thread = threading.Thread(target=self._run, args=(cfg,),
-                                            name='reolink-push', daemon=True)
+            self._loop = asyncio.new_event_loop()
+            self._stop_evt = asyncio.Event()
+            self._thread = threading.Thread(target=self._run, name='reolink-push',
+                                            daemon=True)
             self._thread.start()
+
+    def register_camera(self, uid, dev, ch, name):
+        """Warn when the same camera is reached through two devices (e.g. an
+        NVR channel and the camera's own IP): it would show up twice."""
+        if not uid or uid.lower() == 'unknown':
+            return
+        other = self._uids.setdefault(uid, (dev, ch, name))
+        if other[0] is dev:
+            return
+        odev, och, oname = other
+        text = (f'Camera {name!r} is both {dev.cfg.key} camera {ch + 1} and '
+                f'{odev.cfg.key} camera {och + 1} ({oname!r}); it has two nodes. '
+                f'Add exclude={ch + 1} to {dev.cfg.key} or exclude={och + 1} to '
+                f'{odev.cfg.key} if that is not wanted.')
+        LOGGER.warning(text)
+        self.set_notice(f'dup_{uid}', text)
+
+    def refresh_status(self):
+        devs = self.devices
+        self.setDriver('GV0', sum(d.connected for d in devs))
+        self.setDriver('GV1', sum(d.push_active for d in devs))
+        self.setDriver('GV2', sum(len(d.cameras) for d in devs))
+        self.setDriver('GV3', len(devs))
 
     # --------------------------------------------------------- asyncio side
 
     def _stop_worker(self):
-        if self._loop and self._stop_evt and self._thread and self._thread.is_alive():
+        """Caller holds self._lock."""
+        if self._thread and self._thread.is_alive():
             self._loop.call_soon_threadsafe(self._stop_evt.set)
             self._thread.join(timeout=15)
+            if self._thread.is_alive():
+                LOGGER.warning('Reolink worker did not stop within 15 s')
         self._thread = None
 
-    def _run(self, cfg):
+    def _run(self):
+        loop = self._loop
         try:
-            asyncio.run(self._main(cfg))
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._main())
         except Exception:
             LOGGER.exception('Reolink worker crashed')
+        finally:
+            loop.close()
 
-    async def _sleep_or_stop(self, seconds):
-        """Sleep; return True if a stop was requested."""
+    async def _main(self):
+        ticker = asyncio.create_task(self._tick_loop())
+        tasks = [asyncio.create_task(d.run(self._stop_evt)) for d in self.devices]
         try:
-            await asyncio.wait_for(self._stop_evt.wait(), timeout=seconds)
-            return True
-        except asyncio.TimeoutError:
-            return False
-
-    async def _main(self, cfg):
-        self._loop = asyncio.get_running_loop()
-        self._stop_evt = asyncio.Event()
-        backoff = RETRY_MIN
-
-        while not self._stop_evt.is_set():
-            host = None
-            ticker = None
-            try:
-                # Host must be created inside the running loop
-                host = Host(cfg['host'], cfg['user'], cfg['pw'],
-                            port=cfg['port'], use_https=cfg['https'])
-                await host.get_host_data()
-                self.host = host
-                self.setDriver('GV0', 1)
-                LOGGER.info(f'Connected to {host.nvr_name} ({host.model}), '
-                            f'NVR={host.is_nvr}, channels={host.channels}')
-                self._sync_nodes(host)
-
-                host.baichuan.register_callback('udi', lambda: self._on_push(host))
-                await host.baichuan.subscribe_events()
-                LOGGER.info('Subscribed to Baichuan push events')
-
-                await self._poll_states(host)   # initial state
-                ticker = asyncio.create_task(self._tick_loop())
-                backoff = RETRY_MIN
-
-                while not await self._sleep_or_stop(CHECK_INTERVAL):
-                    await host.baichuan.check_subscribe_events()
-                    active = host.baichuan.events_active
-                    self.setDriver('GV1', int(active))
-                    if not active:
-                        # no push seen yet (or connection lost): keep state fresh
-                        await self._poll_states(host)
-
-            except CredentialsInvalidError:
-                LOGGER.error('NVR rejected username/password')
-                self.poly.Notices['auth'] = 'Reolink NVR rejected the username/password'
-                backoff = RETRY_MAX
-            except Exception as err:
-                LOGGER.error(f'NVR connection error: {err!r}')
-            finally:
-                if ticker is not None:
-                    ticker.cancel()
-                self.setDriver('GV0', 0)
-                self.setDriver('GV1', 0)
-                if host is not None:
-                    try:
-                        host.baichuan.unregister_callback('udi')
-                        await host.baichuan.unsubscribe_events()
-                        await host.logout()
-                    except Exception as err:
-                        LOGGER.debug(f'cleanup: {err!r}')
-                self.host = None
-
-            if await self._sleep_or_stop(backoff):
-                break
-            LOGGER.info(f'Reconnecting to NVR (waited {backoff}s)')
-            backoff = min(backoff * 2, RETRY_MAX)
+            await self._stop_evt.wait()
+            # connected devices notice the stop and log out by themselves; one
+            # still trying to reach its host (30 s request timeout) is cancelled
+            done, pending = await asyncio.wait(tasks, timeout=5)
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        finally:
+            ticker.cancel()
 
     async def _tick_loop(self):
         # expire hold timers once a second
         while True:
             await asyncio.sleep(1)
             now = time.monotonic()
-            for cam in list(self.cameras.values()):
-                cam.tick(now)
-
-    async def _poll_states(self, host):
-        try:
-            await host.get_motion_state_all_ch()
-            await host.get_ai_state_all_ch()
-        except Exception as err:
-            LOGGER.warning(f'State poll failed: {err!r}')
-        self._update_all(host)
-
-    def _on_push(self, host):
-        # runs in the asyncio thread; reolink_aio has already updated its state
-        self.setDriver('GV1', 1)
-        self._update_all(host)
-
-    def _update_all(self, host):
-        now = time.monotonic()
-        for cam in list(self.cameras.values()):
-            try:
-                cam.update(host, now, self.hold)
-            except Exception as err:
-                LOGGER.error(f'{cam.name}: update failed: {err!r}')
-
-    def _sync_nodes(self, host):
-        channels = host.channels if host.is_nvr else [0]
-        for ch in channels:
-            addr = channel_address(ch)
-            if addr in self.cameras:
-                continue
-            name = host.camera_name(ch) or f'Camera {ch + 1}'
-            # PG3 keeps an existing (possibly user-renamed) node's name
-            name = self.poly.getValidName(name)
-            cls = camera_class(host, ch)
-            LOGGER.info(f'ch{ch} {name}: {host.camera_model(ch)} -> {cls.id} '
-                        f'(ai={host.ai_supported_types(ch)})')
-            cam = cls(self.poly, self.address, addr, name, ch)
-            self.poly.addNode(cam)
-            self.cameras[addr] = cam
-        self.setDriver('GV2', len(self.cameras))
+            for dev in self.devices:
+                dev.tick(now)
 
     # -------------------------------------------------------------- commands
 
     def query(self, command=None):
         self.reportDrivers()
-        for cam in self.cameras.values():
-            cam.reportDrivers()
+        for dev in self.devices:
+            for cam in dev.cameras.values():
+                cam.reportDrivers()
 
     def discover(self, command=None):
-        host, loop = self.host, self._loop
-        if host is None or loop is None:
-            LOGGER.warning('Discover: not connected to NVR')
+        loop = self._loop
+        if loop is None or not (self._thread and self._thread.is_alive()):
+            LOGGER.warning('Discover: not running')
             return
-
-        async def _rediscover():
-            await host.get_host_data()
-            self._sync_nodes(host)
-            await self._poll_states(host)
-
-        asyncio.run_coroutine_threadsafe(_rediscover(), loop)
+        for dev in self.devices:
+            asyncio.run_coroutine_threadsafe(dev.rediscover(), loop)
 
     commands = {'QUERY': query, 'DISCOVER': discover}

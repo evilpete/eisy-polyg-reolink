@@ -12,7 +12,7 @@ webhook).
 
 ## Nodes
 
-**Reolink NVR** (`reonvr`)
+**Reolink** (`reonvr`), the controller for all configured NVRs and cameras
 
 <table>
   <thead>
@@ -28,15 +28,19 @@ webhook).
     </tr>
     <tr>
       <td>GV0</td>
-      <td>Logged in to NVR</td>
+      <td>Devices (NVRs / cameras) logged in</td>
     </tr>
     <tr>
       <td>GV1</td>
-      <td>Push events confirmed (set after the first push arrives)</td>
+      <td>Devices with push events confirmed (set after a device's first push)</td>
     </tr>
     <tr>
       <td>GV2</td>
-      <td>Number of cameras</td>
+      <td>Number of camera nodes</td>
+    </tr>
+    <tr>
+      <td>GV3</td>
+      <td>Devices configured</td>
     </tr>
   </tbody>
 </table>
@@ -91,15 +95,19 @@ but only turns OFF after staying clear for `hold_time` seconds (default 5).
 
 1. In PG3x, install from a local/development install pointing at this repo,
    or copy it to the eisy and install as a local node server.
-2. Set the custom parameters `host`, `username`, `password` (see
-   `POLYGLOT_CONFIG.md`).
+2. Add one custom parameter per NVR or stand-alone camera, e.g. key `nvr`,
+   value `host=192.168.1.50;user=guest;pass=secret` (see `POLYGLOT_CONFIG.md`).
+   The original `host` / `username` / `password` keys still work for a
+   single NVR.
 3. Camera nodes are added automatically.
 
 Requires Python >= 3.11 (a `reolink_aio` requirement).
 
 ## How it works
 
-- `nodes/controller.py` runs an asyncio loop in a background thread, logs in
+- `nodes/config.py` turns the custom parameters into a list of devices.
+- `nodes/controller.py` runs one asyncio loop in a background thread with a
+  task per device (`nodes/device.py`). Each device logs in
   with `Host.get_host_data()`, registers a callback with
   `host.baichuan.register_callback()` and calls
   `host.baichuan.subscribe_events()`.
@@ -108,7 +116,8 @@ Requires Python >= 3.11 (a `reolink_aio` requirement).
   OFF is delayed by `hold_time` (a 1 s timer expires the holds).
 - Every 60 s the subscription is health-checked. If no push has been seen
   yet, motion/AI state is polled as a fallback. Lost connections are retried
-  with backoff (10 s up to 5 min).
+  with backoff (10 s up to 5 min), per device, so one unreachable device
+  does not affect the others.
 
 ## References
 

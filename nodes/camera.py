@@ -16,6 +16,10 @@ import udi_interface
 
 LOGGER = udi_interface.LOGGER
 
+# Node hints (UniversalDevicesInc/hints hint.yaml): [0x01, category, subcategory, 0]
+HINT_MOTION = [0x01, 0x03, 0x04, 0x00]     # Sensor / Motion Sensor
+HINT_DOORBELL = [0x01, 0x08, 0x01, 0x00]   # Doorbell / door bell
+
 # driver -> reolink_aio AI object type
 AI_DRIVERS = {
     'GV0': 'people',
@@ -27,8 +31,13 @@ LABELS = {'ST': 'motion', 'GV0': 'person', 'GV1': 'vehicle', 'GV2': 'animal',
           'GV3': 'package', 'GV4': 'visitor', 'GV5': 'online'}
 
 
-def channel_address(channel):
-    return f'cam{channel}'
+def channel_address(device_id, channel):
+    """IoX address for a camera node. The original single device ('nvr')
+    keeps cam0, cam1 ... so existing nodes and programs survive; other
+    devices use <id>_<channel>, e.g. cam_garage_0."""
+    if device_id == 'nvr':
+        return f'cam{channel}'
+    return f'{device_id}_{channel}'
 
 
 def _drv(name):
@@ -38,6 +47,7 @@ def _drv(name):
 class Camera(udi_interface.Node):
     """Motion-only camera (base class for the other camera types)."""
     id = 'reocam'
+    hint = HINT_MOTION
     drivers = [_drv('ST'), _drv('GV5')]
     ai_drivers = ()          # subset of AI_DRIVERS this type shows
     has_visitor = False
@@ -112,6 +122,7 @@ class CameraPackage(Camera):
 
 class Doorbell(Camera):
     id = 'reodbell'
+    hint = HINT_DOORBELL
     drivers = [_drv('ST'), _drv('GV0'), _drv('GV1'), _drv('GV2'), _drv('GV3'),
                _drv('GV4'), _drv('GV5')]
     ai_drivers = ('GV0', 'GV1', 'GV2', 'GV3')
