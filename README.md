@@ -116,4 +116,4 @@ Requires Python >= 3.11 (a `reolink_aio` requirement).
 - https://github.com/ReolinkCameraAPI/reolinkapipy
 - https://gist.github.com/jasonk/4772d1cd5154069cfc9eed07acb2057a
 
-(generated with Claude)
+(code fixed/debugged/patched with Claude)

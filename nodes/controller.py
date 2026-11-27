@@ -88,43 +88,13 @@ class Controller(udi_interface.Node):
         except ValueError:
             self.poly.Notices['hold'] = f'hold_time must be a number of seconds, using {HOLD_DEFAULT}'
             self.hold = HOLD_DEFAULT
-        use = self._read_cam_list('use', 'include')
-        exclude = self._read_cam_list('exclude', 'ignore')
         return {
             'host': host,
             'user': user,
             'pw': pw,
             'port': int(port) if port.isdigit() else None,
             'https': True if https in ('1', 'true', 'yes') else (False if https in ('0', 'false', 'no') else None),
-            'use': use,
-            'exclude': exclude or frozenset(),
         }
-
-    def _read_cam_list(self, key, alias):
-        """Parse a camera-number list like '1,4,5' (1-based, as the NVR shows
-        them). Returns a frozenset of 0-based channels, or None if unset."""
-        raw = (self.params.get(key) or self.params.get(alias) or '').strip()
-        if not raw:
-            return None
-        chans, bad = set(), []
-        for tok in raw.replace(';', ',').replace(' ', ',').split(','):
-            if not tok:
-                continue
-            if tok.isdigit() and int(tok) >= 1:
-                chans.add(int(tok) - 1)
-            else:
-                bad.append(tok)
-        if bad:
-            self.poly.Notices[key] = (f'{key}: ignoring {", ".join(bad)} '
-                                      f'(use camera numbers starting at 1, e.g. 1,4,5)')
-        # nothing usable: treat as unset rather than "no cameras"
-        return frozenset(chans) if chans else None
-
-    @staticmethod
-    def _selected(cfg, ch):
-        if cfg['use'] is not None and ch not in cfg['use']:
-            return False
-        return ch not in cfg['exclude']
 
     def _apply_config(self):
         if not self._started:
@@ -253,34 +223,10 @@ class Controller(udi_interface.Node):
                 LOGGER.error(f'{cam.name}: update failed: {err!r}')
 
     def _sync_nodes(self, host):
-        cfg = self._cfg
         channels = host.channels if host.is_nvr else [0]
         for ch in channels:
-            LOGGER.info(f'camera {ch + 1} (ch{ch}) {host.camera_name(ch)!r}: '
-                        f'{"used" if self._selected(cfg, ch) else "ignored (use/exclude)"}')
-        unknown = sorted(c + 1 for c in (cfg['use'] or set()) | cfg['exclude']
-                         if c not in channels)
-        if unknown:
-            self.poly.Notices['cams'] = (f'use/exclude: no camera {", ".join(map(str, unknown))} '
-                                         f'on this NVR (cameras are 1-{len(channels)})')
-
-        # remove nodes for cameras that are now ignored, including ones left in
-        # the PG3 database from an earlier run (cameras the NVR no longer lists
-        # are kept, they may just be offline)
-        ignored = {channel_address(ch) for ch in channels if not self._selected(cfg, ch)}
-        known = set(self.cameras)
-        try:
-            known |= {n['address'] for n in self.poly.getNodesFromDb() or []}
-        except Exception as err:
-            LOGGER.debug(f'getNodesFromDb: {err!r}')
-        for addr in sorted(known & ignored):
-            LOGGER.info(f'Removing node {addr} (camera ignored by use/exclude)')
-            self.cameras.pop(addr, None)
-            self.poly.delNode(addr)
-
-        for ch in channels:
             addr = channel_address(ch)
-            if addr in self.cameras or not self._selected(cfg, ch):
+            if addr in self.cameras:
                 continue
             name = host.camera_name(ch) or f'Camera {ch + 1}'
             # PG3 keeps an existing (possibly user-renamed) node's name
