@@ -41,6 +41,7 @@ class Controller(udi_interface.Node):
         self.devices = []
         self.hold = HOLD_DEFAULT
         self._cfgs = None
+        self._uids = {}            # camera UID -> (device, channel, name)
         self._lock = threading.Lock()
         self._loop = None
         self._thread = None
@@ -115,6 +116,7 @@ class Controller(udi_interface.Node):
             self._stop_worker()
             self._cfgs = cfgs
             self.devices = [Device(self, c) for c in cfgs]
+            self._uids = {}
             self.refresh_status()
             if not cfgs:
                 return
@@ -123,6 +125,22 @@ class Controller(udi_interface.Node):
             self._thread = threading.Thread(target=self._run, name='reolink-push',
                                             daemon=True)
             self._thread.start()
+
+    def register_camera(self, uid, dev, ch, name):
+        """Warn when the same camera is reached through two devices (e.g. an
+        NVR channel and the camera's own IP): it would show up twice."""
+        if not uid or uid.lower() == 'unknown':
+            return
+        other = self._uids.setdefault(uid, (dev, ch, name))
+        if other[0] is dev:
+            return
+        odev, och, oname = other
+        text = (f'Camera {name!r} is both {dev.cfg.key} camera {ch + 1} and '
+                f'{odev.cfg.key} camera {och + 1} ({oname!r}); it has two nodes. '
+                f'Add exclude={ch + 1} to {dev.cfg.key} or exclude={och + 1} to '
+                f'{odev.cfg.key} if that is not wanted.')
+        LOGGER.warning(text)
+        self.set_notice(f'dup_{uid}', text)
 
     def refresh_status(self):
         devs = self.devices

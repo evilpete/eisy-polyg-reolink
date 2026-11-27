@@ -13,8 +13,8 @@ LOGGER = udi_interface.LOGGER
 CHECK_INTERVAL = 60      # seconds between subscription health checks
 RETRY_MIN = 10           # reconnect backoff (seconds)
 RETRY_MAX = 300
-REQUEST_TIMEOUT = 15    # per HTTP request to the device
-CONNECT_TIMEOUT = 60    # whole login + capability read
+REQUEST_TIMEOUT = 30    # per HTTP request (reolink_aio default; Wi-Fi cameras can be slow)
+CONNECT_TIMEOUT = 90    # whole login + capability read (~20 s seen on an RLC-511)
 
 
 class Device:
@@ -116,8 +116,10 @@ class Device:
 
     async def poll_states(self):
         try:
-            await self.host.get_motion_state_all_ch()
-            await self.host.get_ai_state_all_ch()
+            host = self.host
+            await host.get_motion_state_all_ch()
+            if any(host.ai_supported(ch) for ch in host.channels):
+                await host.get_ai_state_all_ch()
         except Exception as err:
             LOGGER.warning(f'{self.label}: state poll failed: {err!r}')
         self.update_all()
@@ -186,4 +188,12 @@ class Device:
             cam = cls(self.poly, self.ctl.address, addr, name, ch)
             self.poly.addNode(cam)
             self.cameras[addr] = cam
+
+        for ch in channels:
+            if cfg.selected(ch):
+                try:
+                    uid = host.camera_uid(ch)
+                except Exception:
+                    uid = None
+                self.ctl.register_camera(uid, self, ch, host.camera_name(ch))
         self.ctl.refresh_status()
